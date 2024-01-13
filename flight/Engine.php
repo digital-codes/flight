@@ -30,8 +30,16 @@ use Throwable;
  * @method void start() Starts engine
  * @method void stop() Stops framework and outputs current response
  * @method void halt(int $code = 200, string $message = '') Stops processing and returns a given response.
- * @method void route(string $pattern, callable $callback, bool $pass_route = false) Routes a URL to a callback function.
+ * 
+ * Routing
+ * @method void route(string $pattern, callable $callback, bool $pass_route = false, string $alias = '') Routes a URL to a callback function with all applicable methods
+ * @method void group(string $pattern, callable $callback) Groups a set of routes together under a common prefix.
+ * @method void post(string $pattern, callable $callback, bool $pass_route = false, string $alias = '') Routes a POST URL to a callback function.
+ * @method void put(string $pattern, callable $callback, bool $pass_route = false, string $alias = '') Routes a PUT URL to a callback function.
+ * @method void patch(string $pattern, callable $callback, bool $pass_route = false, string $alias = '') Routes a PATCH URL to a callback function.
+ * @method void delete(string $pattern, callable $callback, bool $pass_route = false, string $alias = '') Routes a DELETE URL to a callback function.
  * @method Router router() Gets router
+ * @method string getUrl(string $alias) Gets a url from an alias
  *
  * Views
  * @method void render(string $file, array $data = null, string $key = null) Renders template
@@ -40,7 +48,7 @@ use Throwable;
  * Request-response
  * @method Request request() Gets current request
  * @method Response response() Gets current response
- * @method void error(Exception $e) Sends an HTTP 500 response for any errors.
+ * @method void error(Throwable $e) Sends an HTTP 500 response for any errors.
  * @method void notFound() Sends an HTTP 404 response when a URL is not found.
  * @method void redirect(string $url, int $code = 303)  Redirects the current request to another URL.
  * @method void json(mixed $data, int $code = 200, bool $encode = true, string $charset = 'utf-8', int $option = 0) Sends a JSON response.
@@ -54,6 +62,7 @@ class Engine
 {
     /**
      * Stored variables.
+     * @var array<string, mixed>
      */
     protected array $vars;
 
@@ -66,6 +75,13 @@ class Engine
      * Event dispatcher.
      */
     protected Dispatcher $dispatcher;
+
+	/**
+	 * If the framework has been initialized or not
+	 *
+	 * @var boolean
+	 */
+	protected bool $initialized = false;
 
     /**
      * Constructor.
@@ -84,7 +100,7 @@ class Engine
      * Handles calls to class methods.
      *
      * @param string $name   Method name
-     * @param array  $params Method parameters
+     * @param array<int, mixed>  $params Method parameters
      *
      * @throws Exception
      *
@@ -114,7 +130,7 @@ class Engine
      */
     public function init(): void
     {
-        static $initialized = false;
+        $initialized = $this->initialized;
         $self = $this;
 
         if ($initialized) {
@@ -136,7 +152,7 @@ class Engine
         $methods = [
             'start', 'stop', 'route', 'halt', 'error', 'notFound',
             'render', 'redirect', 'etag', 'lastModified', 'json', 'jsonp',
-            'post', 'put', 'patch', 'delete',
+            'post', 'put', 'patch', 'delete', 'group', 'getUrl',
         ];
         foreach ($methods as $name) {
             $this->dispatcher->set($name, [$this, '_' . $name]);
@@ -155,8 +171,8 @@ class Engine
         $this->before('start', function () use ($self) {
             // Enable error handling
             if ($self->get('flight.handle_errors')) {
-                set_error_handler([$self, 'handleError']);
-                set_exception_handler([$self, 'handleException']);
+                set_error_handler(array($self, 'handleError'));
+                set_exception_handler(array($self, 'handleException'));
             }
 
             // Set case-sensitivity
@@ -165,7 +181,7 @@ class Engine
             $self->response()->content_length = $self->get('flight.content_length');
         });
 
-        $initialized = true;
+        $this->initialized = true;
     }
 
     /**
@@ -177,23 +193,26 @@ class Engine
      * @param int    $errline Error file line number
      *
      * @throws ErrorException
+     * @return bool
      */
     public function handleError(int $errno, string $errstr, string $errfile, int $errline)
     {
         if ($errno & error_reporting()) {
             throw new ErrorException($errstr, $errno, 0, $errfile, $errline);
         }
+
+        return false;
     }
 
     /**
      * Custom exception handler. Logs exceptions.
      *
-     * @param Exception $e Thrown exception
+     * @param Throwable $e Thrown exception
      */
     public function handleException($e): void
     {
         if ($this->get('flight.log_errors')) {
-            error_log($e->getMessage());
+            error_log($e->getMessage()); // @codeCoverageIgnore
         }
 
         $this->error($e);
@@ -203,7 +222,7 @@ class Engine
      * Maps a callback to a framework method.
      *
      * @param string   $name     Method name
-     * @param callback $callback Callback function
+     * @param callable $callback Callback function
      *
      * @throws Exception If trying to map over a framework method
      */
@@ -218,11 +237,12 @@ class Engine
 
     /**
      * Registers a class to a framework method.
+     * @template T of object
      *
      * @param string        $name     Method name
-     * @param string        $class    Class name
-     * @param array         $params   Class initialization parameters
-     * @param callable|null $callback $callback Function to call after object instantiation
+     * @param class-string<T> $class  Class name
+     * @param array<int, mixed> $params   Class initialization parameters
+     * @param ?callable(T $instance): void $callback Function to call after object instantiation
      *
      * @throws Exception If trying to map over a framework method
      */
@@ -239,7 +259,7 @@ class Engine
      * Adds a pre-filter to a method.
      *
      * @param string   $name     Method name
-     * @param callback $callback Callback function
+     * @param callable $callback Callback function
      */
     public function before(string $name, callable $callback): void
     {
@@ -250,7 +270,7 @@ class Engine
      * Adds a post-filter to a method.
      *
      * @param string   $name     Method name
-     * @param callback $callback Callback function
+     * @param callable $callback Callback function
      */
     public function after(string $name, callable $callback): void
     {
@@ -348,7 +368,7 @@ class Engine
 
         // Flush any existing output
         if (ob_get_length() > 0) {
-            $response->write(ob_get_clean());
+            $response->write(ob_get_clean()); // @codeCoverageIgnore
         }
 
         // Enable output buffering
@@ -392,9 +412,10 @@ class Engine
      */
     public function _error($e): void
     {
-        $msg = sprintf('<h1>500 Internal Server Error</h1>' .
-            '<h3>%s (%s)</h3>' .
-            '<pre>%s</pre>',
+        $msg = sprintf(
+            '<h1>500 Internal Server Error</h1>' .
+                '<h3>%s (%s)</h3>' .
+                '<pre>%s</pre>',
             $e->getMessage(),
             $e->getCode(),
             $e->getTraceAsString()
@@ -406,9 +427,11 @@ class Engine
                 ->status(500)
                 ->write($msg)
                 ->send();
+		// @codeCoverageIgnoreStart
         } catch (Throwable $t) {
             exit($msg);
         }
+		// @codeCoverageIgnoreEnd
     }
 
     /**
@@ -427,7 +450,8 @@ class Engine
                 $response->status($code);
             }
 
-            $response->write(ob_get_clean());
+            $content = ob_get_clean();
+            $response->write($content ?: '');
 
             $response->send();
         }
@@ -437,19 +461,31 @@ class Engine
      * Routes a URL to a callback function.
      *
      * @param string   $pattern    URL pattern to match
-     * @param callback $callback   Callback function
+     * @param callable $callback   Callback function
      * @param bool     $pass_route Pass the matching route object to the callback
+	 * @param string   $alias      the alias for the route
      */
-    public function _route(string $pattern, callable $callback, bool $pass_route = false): void
+    public function _route(string $pattern, callable $callback, bool $pass_route = false, string $alias = ''): void
     {
-        $this->router()->map($pattern, $callback, $pass_route);
+        $this->router()->map($pattern, $callback, $pass_route, $alias);
+    }
+
+	/**
+     * Routes a URL to a callback function.
+     *
+     * @param string   $pattern    URL pattern to match
+     * @param callable $callback   Callback function that includes the Router class as first parameter
+     */
+    public function _group(string $pattern, callable $callback): void
+    {
+        $this->router()->group($pattern, $callback);
     }
 
     /**
      * Routes a URL to a callback function.
      *
      * @param string   $pattern    URL pattern to match
-     * @param callback $callback   Callback function
+     * @param callable $callback   Callback function
      * @param bool     $pass_route Pass the matching route object to the callback
      */
     public function _post(string $pattern, callable $callback, bool $pass_route = false): void
@@ -461,7 +497,7 @@ class Engine
      * Routes a URL to a callback function.
      *
      * @param string   $pattern    URL pattern to match
-     * @param callback $callback   Callback function
+     * @param callable $callback   Callback function
      * @param bool     $pass_route Pass the matching route object to the callback
      */
     public function _put(string $pattern, callable $callback, bool $pass_route = false): void
@@ -473,7 +509,7 @@ class Engine
      * Routes a URL to a callback function.
      *
      * @param string   $pattern    URL pattern to match
-     * @param callback $callback   Callback function
+     * @param callable $callback   Callback function
      * @param bool     $pass_route Pass the matching route object to the callback
      */
     public function _patch(string $pattern, callable $callback, bool $pass_route = false): void
@@ -485,7 +521,7 @@ class Engine
      * Routes a URL to a callback function.
      *
      * @param string   $pattern    URL pattern to match
-     * @param callback $callback   Callback function
+     * @param callable $callback   Callback function
      * @param bool     $pass_route Pass the matching route object to the callback
      */
     public function _delete(string $pattern, callable $callback, bool $pass_route = false): void
@@ -498,6 +534,7 @@ class Engine
      *
      * @param int    $code    HTTP status code
      * @param string $message Response message
+	 * 
      */
     public function _halt(int $code = 200, string $message = ''): void
     {
@@ -506,7 +543,10 @@ class Engine
             ->status($code)
             ->write($message)
             ->send();
-        exit();
+		// apologies for the crappy hack here...
+		if($message !== 'skip---exit') {
+			exit(); // @codeCoverageIgnore
+		}
     }
 
     /**
@@ -519,8 +559,8 @@ class Engine
             ->status(404)
             ->write(
                 '<h1>404 Not Found</h1>' .
-                '<h3>The page you have requested could not be found.</h3>' .
-                str_repeat(' ', 512)
+                    '<h3>The page you have requested could not be found.</h3>' .
+                    str_repeat(' ', 512)
             )
             ->send();
     }
@@ -555,7 +595,7 @@ class Engine
      * Renders a template.
      *
      * @param string      $file Template file
-     * @param array|null  $data Template data
+     * @param ?array<string, mixed> $data Template data
      * @param string|null $key  View variable name
      *
      * @throws Exception
@@ -639,8 +679,10 @@ class Engine
 
         $this->response()->header('ETag', $id);
 
-        if (isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
-            $_SERVER['HTTP_IF_NONE_MATCH'] === $id) {
+        if (
+            isset($_SERVER['HTTP_IF_NONE_MATCH']) &&
+            $_SERVER['HTTP_IF_NONE_MATCH'] === $id
+        ) {
             $this->halt(304);
         }
     }
@@ -654,9 +696,23 @@ class Engine
     {
         $this->response()->header('Last-Modified', gmdate('D, d M Y H:i:s \G\M\T', $time));
 
-        if (isset($_SERVER['HTTP_IF_MODIFIED_SINCE']) &&
-            strtotime($_SERVER['HTTP_IF_MODIFIED_SINCE']) === $time) {
+        if (
+            isset($_SERVER['HTTP_IF_MODIFIED_SINCE']) &&
+            strtotime($_SERVER['HTTP_IF_MODIFIED_SINCE']) === $time
+        ) {
             $this->halt(304);
         }
     }
+
+	/**
+	 * Gets a url from an alias that's supplied.
+	 *
+	 * @param string $alias the route alias
+	 * @param array<string,mixed> the params for the route if applicable
+	 * @return string
+	 */
+	public function _getUrl(string $alias, array $params = []): string
+	{
+		return $this->router()->getUrlByAlias($alias, $params);
+	}
 }
