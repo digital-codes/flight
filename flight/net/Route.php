@@ -1,12 +1,6 @@
 <?php
 
 declare(strict_types=1);
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2011, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
 
 namespace flight\net;
 
@@ -14,48 +8,74 @@ namespace flight\net;
  * The Route class is responsible for routing an HTTP request to
  * an assigned callback function. The Router tries to match the
  * requested URL against a series of URL patterns.
+ *
+ * @license MIT, http://flightphp.com/license
+ * @copyright Copyright (c) 2011, Mike Cao <mike@mikecao.com>
  */
-final class Route
+class Route
 {
     /**
-     * @var string URL pattern
+     * URL pattern
      */
     public string $pattern;
 
     /**
-     * @var mixed Callback function
+     * Callback function
+     *
+     * @var mixed
      */
     public $callback;
 
     /**
-     * @var array<int, string> HTTP methods
+     * HTTP methods
+     *
+     * @var array<int, string>
      */
     public array $methods = [];
 
     /**
-     * @var array<int, ?string> Route parameters
+     * Route parameters
+     *
+     * @var array<int, ?string>
      */
     public array $params = [];
 
     /**
-     * @var string|null Matching regular expression
+     * Matching regular expression
      */
     public ?string $regex = null;
 
     /**
-     * @var string URL splat content
+     * URL splat content
      */
     public string $splat = '';
 
     /**
-     * @var bool Pass self in callback parameters
+     * Pass self in callback parameters
      */
     public bool $pass = false;
 
-	/**
-	 * @var string The alias is a way to identify the route using a simple name ex: 'login' instead of /admin/login
-	 */
-	public string $alias = '';
+    /**
+     * The alias is a way to identify the route using a simple name ex: 'login' instead of /admin/login
+     */
+    public string $alias = '';
+
+    /**
+     * The middleware to be applied to the route
+     *
+     * @var array<int, callable|object>
+     */
+    public array $middleware = [];
+
+    /** Whether the response for this route should be streamed. */
+    public bool $is_streamed = false;
+
+    /**
+     * If this route is streamed, the headers to be sent before the response.
+     *
+     * @var array<string, mixed>
+     */
+    public array $streamed_headers = [];
 
     /**
      * Constructor.
@@ -65,13 +85,13 @@ final class Route
      * @param array<int, string>  $methods  HTTP methods
      * @param bool   $pass     Pass self in callback parameters
      */
-    public function __construct(string $pattern, $callback, array $methods, bool $pass, string $alias = '')
+    public function __construct(string $pattern, callable $callback, array $methods, bool $pass, string $alias = '')
     {
         $this->pattern = $pattern;
         $this->callback = $callback;
         $this->methods = $methods;
         $this->pass = $pass;
-		$this->alias = $alias;
+        $this->alias = $alias;
     }
 
     /**
@@ -93,13 +113,13 @@ final class Route
         $last_char = substr($this->pattern, -1);
 
         // Get splat
-        if ('*' === $last_char) {
+        if ($last_char === '*') {
             $n = 0;
             $len = \strlen($url);
             $count = substr_count($this->pattern, '/');
 
             for ($i = 0; $i < $len; $i++) {
-                if ('/' === $url[$i]) {
+                if ($url[$i] === '/') {
                     $n++;
                 }
                 if ($n === $count) {
@@ -107,7 +127,7 @@ final class Route
                 }
             }
 
-            $this->splat = (string) substr($url, $i + 1);
+            $this->splat = strval(substr($url, $i + 1));
         }
 
         // Build the regex for matching
@@ -126,11 +146,9 @@ final class Route
             $regex
         );
 
-        // Fix trailing slash
-        if ('/' === $last_char) {
+        if ('/' === $last_char) { // Fix trailing slash
             $regex .= '?';
-        } // Allow trailing slash
-        else {
+        } else { // Allow trailing slash
             $regex .= '/?';
         }
 
@@ -160,34 +178,74 @@ final class Route
         return \count(array_intersect([$method, '*'], $this->methods)) > 0;
     }
 
-	/**
-	 * Checks if an alias matches the route alias.
-	 *
-	 * @param string $alias [description]
-	 * @return boolean
-	 */
-	public function matchAlias(string $alias): bool
-	{
-		return $this->alias === $alias;
-	}
+    /**
+     * Checks if an alias matches the route alias.
+     */
+    public function matchAlias(string $alias): bool
+    {
+        return $this->alias === $alias;
+    }
 
-	/**
-	 * Hydrates the route url with the given parameters
-	 *
-	 * @param array<string,mixed> $params the parameters to pass to the route
-	 * @return string
-	 */
-	public function hydrateUrl(array $params = []): string {
-		$url = preg_replace_callback("/(?:@([a-zA-Z0-9]+)(?:\:([^\/]+))?\)*)/i", function($match) use ($params) {
-			if(isset($match[1]) && isset($params[$match[1]])) {
-				return $params[$match[1]];
-			}
-		}, $this->pattern);
+    /**
+     * Hydrates the route url with the given parameters
+     *
+     * @param array<string, mixed> $params the parameters to pass to the route
+     */
+    public function hydrateUrl(array $params = []): string
+    {
+        $url = preg_replace_callback("/(?:@([a-zA-Z0-9]+)(?:\:([^\/]+))?\)*)/i", function ($match) use ($params) {
+            if (isset($match[1]) && isset($params[$match[1]])) {
+                return $params[$match[1]];
+            }
+        }, $this->pattern);
 
-		// catches potential optional parameter
-		$url = str_replace('(/', '/', $url);
-		// trim any trailing slashes
-		$url = rtrim($url, '/');
-		return $url;
-	}
+        // catches potential optional parameter
+        $url = str_replace('(/', '/', $url);
+        // trim any trailing slashes
+        if ($url !== '/') {
+            $url = rtrim($url, '/');
+        }
+        return $url;
+    }
+
+    /**
+     * Sets the route alias
+     *
+     * @return $this
+     */
+    public function setAlias(string $alias): self
+    {
+        $this->alias = $alias;
+        return $this;
+    }
+
+    /**
+     * Sets the route middleware
+     *
+     * @param array<int, callable>|callable $middleware
+     */
+    public function addMiddleware($middleware): self
+    {
+        if (is_array($middleware) === true) {
+            $this->middleware = array_merge($this->middleware, $middleware);
+        } else {
+            $this->middleware[] = $middleware;
+        }
+        return $this;
+    }
+
+    /**
+     * This will allow the response for this route to be streamed.
+     *
+     * @param array<string, mixed> $headers a key value of headers to set before the stream starts.
+     *
+     * @return $this
+     */
+    public function streamWithHeaders(array $headers): self
+    {
+        $this->is_streamed = true;
+        $this->streamed_headers = $headers;
+
+        return $this;
+    }
 }

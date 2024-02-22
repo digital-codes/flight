@@ -1,16 +1,15 @@
 <?php
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2012, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
 
+declare(strict_types=1);
+
+namespace tests;
+
+use Exception;
 use flight\Engine;
+use tests\classes\Hello;
+use PHPUnit\Framework\TestCase;
 
-require_once __DIR__ . '/classes/Hello.php';
-
-class MapTest extends PHPUnit\Framework\TestCase
+class MapTest extends TestCase
 {
     private Engine $app;
 
@@ -58,7 +57,7 @@ class MapTest extends PHPUnit\Framework\TestCase
     // Map a static class method
     public function testStaticClassMethodMapping()
     {
-        $this->app->map('map4', ['Hello', 'sayBye']);
+        $this->app->map('map4', [Hello::class, 'sayBye']);
 
         $result = $this->app->map4();
 

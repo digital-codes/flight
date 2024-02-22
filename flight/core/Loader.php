@@ -1,54 +1,53 @@
 <?php
 
 declare(strict_types=1);
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2011, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
 
 namespace flight\core;
 
 use Closure;
 use Exception;
-use ReflectionClass;
-use ReflectionException;
 
 /**
  * The Loader class is responsible for loading objects. It maintains
  * a list of reusable class instances and can generate a new class
  * instances with custom initialization parameters. It also performs
  * class autoloading.
+ *
+ * @license MIT, http://flightphp.com/license
+ * @copyright Copyright (c) 2011, Mike Cao <mike@mikecao.com>
  */
 class Loader
 {
     /**
      * Registered classes.
-     * @var array<string, array{class-string, array<int, mixed>, ?callable}> $classes
+     *
+     * @var array<string, array{class-string|Closure(): object, array<int, mixed>, ?callable}> $classes
      */
     protected array $classes = [];
 
     /**
      * Class instances.
+     *
      * @var array<string, object>
      */
     protected array $instances = [];
 
     /**
      * Autoload directories.
+     *
      * @var array<int, string>
      */
     protected static array $dirs = [];
 
     /**
      * Registers a class.
-     * @template T of object
      *
-     * @param string          $name     Registry name
-     * @param class-string<T> $class    Class name or function to instantiate class
-     * @param array<int, mixed>           $params   Class initialization parameters
-     * @param ?callable(T $instance): void   $callback $callback Function to call after object instantiation
+     * @param string $name Registry name
+     * @param class-string<T>|Closure(): T $class Class name or function to instantiate class
+     * @param array<int, mixed> $params Class initialization parameters
+     * @param ?Closure(T $instance): void $callback $callback Function to call after object instantiation
+     *
+     * @template T of object
      */
     public function register(string $name, $class, array $params = [], ?callable $callback = null): void
     {
@@ -75,7 +74,7 @@ class Loader
      *
      * @throws Exception
      *
-     * @return object Class instance
+     * @return ?object Class instance
      */
     public function load(string $name, bool $shared = true): ?object
     {
@@ -112,7 +111,7 @@ class Loader
      *
      * @param string $name Instance name
      *
-     * @return object Class instance
+     * @return ?object Class instance
      */
     public function getInstance(string $name): ?object
     {
@@ -121,10 +120,11 @@ class Loader
 
     /**
      * Gets a new instance of a class.
-     * @template T of object
      *
      * @param class-string<T>|Closure(): class-string<T> $class  Class name or callback function to instantiate class
      * @param array<int, string>           $params Class initialization parameters
+     *
+     * @template T of object
      *
      * @throws Exception
      *
@@ -136,33 +136,12 @@ class Loader
             return \call_user_func_array($class, $params);
         }
 
-        switch (\count($params)) {
-            case 0:
-                return new $class();
-            case 1:
-                return new $class($params[0]);
-			// @codeCoverageIgnoreStart
-            case 2:
-                return new $class($params[0], $params[1]);
-            case 3:
-                return new $class($params[0], $params[1], $params[2]);
-            case 4:
-                return new $class($params[0], $params[1], $params[2], $params[3]);
-            case 5:
-                return new $class($params[0], $params[1], $params[2], $params[3], $params[4]);
-			// @codeCoverageIgnoreEnd
-            default:
-                try {
-                    $refClass = new ReflectionClass($class);
-
-                    return $refClass->newInstanceArgs($params);
-                } catch (ReflectionException $e) {
-                    throw new Exception("Cannot instantiate {$class}", 0, $e);
-                }
-        }
+        return new $class(...$params);
     }
 
     /**
+     * Gets a registered callable
+     *
      * @param string $name Registry name
      *
      * @return mixed Class information or null if not registered
@@ -204,19 +183,20 @@ class Loader
 
     /**
      * Autoloads classes.
-	 * 
-	 * Classes are not allowed to have underscores in their names.
+     *
+     * Classes are not allowed to have underscores in their names.
      *
      * @param string $class Class name
      */
     public static function loadClass(string $class): void
     {
-        $class_file = str_replace(['\\', '_'], '/', $class) . '.php';
+        $classFile = str_replace(['\\', '_'], '/', $class) . '.php';
 
         foreach (self::$dirs as $dir) {
-            $file = $dir . '/' . $class_file;
-            if (file_exists($file)) {
-                require $file;
+            $filePath = "$dir/$classFile";
+
+            if (file_exists($filePath)) {
+                require_once $filePath;
 
                 return;
             }

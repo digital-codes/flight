@@ -1,12 +1,6 @@
 <?php
 
 declare(strict_types=1);
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2011, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
 
 namespace flight\util;
 
@@ -15,20 +9,20 @@ use Countable;
 use Iterator;
 use JsonSerializable;
 
-if (!interface_exists('JsonSerializable')) {
-    require_once __DIR__ . '/LegacyJsonSerializable.php'; // @codeCoverageIgnore
-}
-
 /**
  * The Collection class allows you to access a set of data
  * using both array and object notation.
+ *
+ * @license MIT, http://flightphp.com/license
+ * @copyright Copyright (c) 2011, Mike Cao <mike@mikecao.com>
  * @implements ArrayAccess<string, mixed>
  * @implements Iterator<string, mixed>
  */
-final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializable
+class Collection implements ArrayAccess, Iterator, Countable, JsonSerializable
 {
     /**
      * Collection data.
+     *
      * @var array<string, mixed>
      */
     private array $data;
@@ -46,9 +40,7 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
     /**
      * Gets an item.
      *
-     * @param string $key Key
-     *
-     * @return mixed Value
+     * @return mixed Value if `$key` exists in collection data, otherwise returns `NULL`
      */
     public function __get(string $key)
     {
@@ -58,7 +50,6 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
     /**
      * Set an item.
      *
-     * @param string $key   Key
      * @param mixed  $value Value
      */
     public function __set(string $key, $value): void
@@ -68,10 +59,6 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
 
     /**
      * Checks if an item exists.
-     *
-     * @param string $key Key
-     *
-     * @return bool Item status
      */
     public function __isset(string $key): bool
     {
@@ -80,8 +67,6 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
 
     /**
      * Removes an item.
-     *
-     * @param string $key Key
      */
     public function __unset(string $key): void
     {
@@ -120,9 +105,7 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
     /**
      * Checks if an item exists at the offset.
      *
-     * @param string $offset Offset
-     *
-     * @return bool Item status
+     * @param string $offset
      */
     public function offsetExists($offset): bool
     {
@@ -132,7 +115,7 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
     /**
      * Removes an item at the offset.
      *
-     * @param string $offset Offset
+     * @param string $offset
      */
     public function offsetUnset($offset): void
     {
@@ -180,8 +163,6 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
 
     /**
      * Checks if the current collection key is valid.
-     *
-     * @return bool Key status
      */
     public function valid(): bool
     {
@@ -192,8 +173,6 @@ final class Collection implements ArrayAccess, Iterator, Countable, JsonSerializ
 
     /**
      * Gets the size of the collection.
-     *
-     * @return int Collection size
      */
     public function count(): int
     {

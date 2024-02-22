@@ -1,18 +1,21 @@
 <?php
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2012, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
 
+declare(strict_types=1);
+
+namespace tests;
+
+use Closure;
+use Exception;
 use flight\core\Dispatcher;
+use InvalidArgumentException;
+use PharIo\Manifest\InvalidEmailException;
+use tests\classes\Hello;
+use PHPUnit\Framework\TestCase;
+use tests\classes\TesterClass;
+use TypeError;
 
-class DispatcherTest extends PHPUnit\Framework\TestCase
+class DispatcherTest extends TestCase
 {
-    /**
-     * @var Dispatcher|null
-     */
     private Dispatcher $dispatcher;
 
     protected function setUp(): void
@@ -20,161 +23,232 @@ class DispatcherTest extends PHPUnit\Framework\TestCase
         $this->dispatcher = new Dispatcher();
     }
 
-    // Map a closure
-    public function testClosureMapping()
+    public function testClosureMapping(): void
     {
-        $this->dispatcher->set('map1', function () {
+        $this->dispatcher->set('map1', Closure::fromCallable(function (): string {
+            return 'hello';
+        }));
+
+        $this->assertSame('hello', $this->dispatcher->run('map1'));
+    }
+
+    public function testFunctionMapping(): void
+    {
+        $this->dispatcher->set('map2', function (): string {
             return 'hello';
         });
 
-        $result = $this->dispatcher->run('map1');
-
-        self::assertEquals('hello', $result);
+        $this->assertSame('hello', $this->dispatcher->run('map2'));
     }
 
-    // Map a function
-    public function testFunctionMapping()
+    public function testHasEvent(): void
     {
-        $this->dispatcher->set('map2', function () {
-            return 'hello';
+        $this->dispatcher->set('map-event', function (): void {
         });
 
-        $result = $this->dispatcher->run('map2');
-
-        self::assertEquals('hello', $result);
+        $this->assertTrue($this->dispatcher->has('map-event'));
     }
 
-    public function testHasEvent()
+    public function testClearAllRegisteredEvents(): void
     {
-        $this->dispatcher->set('map-event', function () {
-            return 'hello';
-        });
+        $customFunction = $anotherFunction = function (): void {
+        };
 
-		$result = $this->dispatcher->has('map-event');
+        $this->dispatcher
+            ->set('map-event', $customFunction)
+            ->set('map-event-2', $anotherFunction);
 
-		$this->assertTrue($result);
+        $this->dispatcher->clear();
+
+        $this->assertFalse($this->dispatcher->has('map-event'));
+        $this->assertFalse($this->dispatcher->has('map-event-2'));
     }
 
-	public function testClearAllRegisteredEvents() {
-		$this->dispatcher->set('map-event', function () {
-			return 'hello';
-		});
-
-		$this->dispatcher->set('map-event-2', function () {
-			return 'there';
-		});
-
-		$this->dispatcher->clear();
-
-		$result = $this->dispatcher->has('map-event');
-		$this->assertFalse($result);
-		$result = $this->dispatcher->has('map-event-2');
-		$this->assertFalse($result);
-	}
-
-	public function testClearDeclaredRegisteredEvent() {
-		$this->dispatcher->set('map-event', function () {
-			return 'hello';
-		});
-
-		$this->dispatcher->set('map-event-2', function () {
-			return 'there';
-		});
-
-		$this->dispatcher->clear('map-event');
-
-		$result = $this->dispatcher->has('map-event');
-		$this->assertFalse($result);
-		$result = $this->dispatcher->has('map-event-2');
-		$this->assertTrue($result);
-	}
-
-	// Map a static function
-	public function testStaticFunctionMapping()
-	{
-		$this->dispatcher->set('map2', 'Hello::sayHi');
-
-		$result = $this->dispatcher->run('map2');
-
-		self::assertEquals('hello', $result);
-	}
-
-    // Map a class method
-    public function testClassMethodMapping()
+    public function testClearDeclaredRegisteredEvent(): void
     {
-        $h = new Hello();
+        $customFunction = $anotherFunction = function (): void {
+        };
 
-        $this->dispatcher->set('map3', [$h, 'sayHi']);
+        $this->dispatcher
+            ->set('map-event', $customFunction)
+            ->set('map-event-2', $anotherFunction);
 
-        $result = $this->dispatcher->run('map3');
+        $this->dispatcher->clear('map-event');
 
-        self::assertEquals('hello', $result);
+        $this->assertFalse($this->dispatcher->has('map-event'));
+        $this->assertTrue($this->dispatcher->has('map-event-2'));
     }
 
-    // Map a static class method
-    public function testStaticClassMethodMapping()
+    public function testStaticFunctionMapping(): void
     {
-        $this->dispatcher->set('map4', ['Hello', 'sayBye']);
+        $this->dispatcher->set('map2', Hello::class . '::sayBye');
 
-        $result = $this->dispatcher->run('map4');
-
-        self::assertEquals('goodbye', $result);
+        $this->assertSame('goodbye', $this->dispatcher->run('map2'));
     }
 
-    // Run before and after filters
-    public function testBeforeAndAfter()
+    public function testClassMethodMapping(): void
     {
-        $this->dispatcher->set('hello', function ($name) {
+        $this->dispatcher->set('map3', [new Hello(), 'sayHi']);
+
+        $this->assertSame('hello', $this->dispatcher->run('map3'));
+    }
+
+    public function testStaticClassMethodMapping(): void
+    {
+        $this->dispatcher->set('map4', [Hello::class, 'sayBye']);
+
+        $this->assertSame('goodbye', $this->dispatcher->run('map4'));
+    }
+
+    public function testBeforeAndAfter(): void
+    {
+        $this->dispatcher->set('hello', function (string $name): string {
             return "Hello, $name!";
         });
 
-        $this->dispatcher->hook('hello', 'before', function (&$params, &$output) {
-            // Manipulate the parameter
-            $params[0] = 'Fred';
-        });
-
-        $this->dispatcher->hook('hello', 'after', function (&$params, &$output) {
-            // Manipulate the output
-            $output .= ' Have a nice day!';
-        });
+        $this->dispatcher
+            ->hook('hello', $this->dispatcher::FILTER_BEFORE, function (array &$params): void {
+                // Manipulate the parameter
+                $params[0] = 'Fred';
+            })
+            ->hook('hello', $this->dispatcher::FILTER_AFTER, function (array &$params, string &$output): void {
+                // Manipulate the output
+                $output .= ' Have a nice day!';
+            });
 
         $result = $this->dispatcher->run('hello', ['Bob']);
 
-        self::assertEquals('Hello, Fred! Have a nice day!', $result);
+        $this->assertSame('Hello, Fred! Have a nice day!', $result);
     }
 
-    // Test an invalid callback
-    public function testInvalidCallback()
+    public function testInvalidCallback(): void
+    {
+        $this->expectException(TypeError::class);
+
+        Dispatcher::execute(['NonExistentClass', 'nonExistentMethod']);
+    }
+
+    public function testInvalidCallableString(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid callback specified.');
+
+        Dispatcher::execute('inexistentGlobalFunction');
+    }
+
+    public function testInvalidCallbackBecauseConstructorParameters(): void
+    {
+        $class = TesterClass::class;
+        $method = 'instanceMethod';
+        $exceptionMessage = "Method '$class::$method' cannot be called statically. ";
+        $exceptionMessage .= "$class::__construct require 6 parameters";
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage($exceptionMessage);
+
+        static $params = [];
+        Dispatcher::invokeMethod([$class, $method], $params);
+    }
+
+    // It will be useful for executing instance Controller methods statically
+    public function testCanExecuteAnNonStaticMethodStatically(): void
+    {
+        $this->assertSame('hello', Dispatcher::execute([Hello::class, 'sayHi']));
+    }
+
+    public function testItThrowsAnExceptionWhenRunAnUnregistedEventName(): void
     {
         $this->expectException(Exception::class);
 
-        $this->dispatcher->execute(['NonExistentClass', 'nonExistentMethod']);
+        $this->dispatcher->run('nonExistentEvent');
     }
 
-	public function testCallFunction4Params() {
-		$closure = function($param1, $params2, $params3, $param4) {
-			return 'hello'.$param1.$params2.$params3.$param4;
-		};
-		$params = ['param1', 'param2', 'param3', 'param4'];
-		$result = $this->dispatcher->callFunction($closure, $params);
-		$this->assertEquals('helloparam1param2param3param4', $result);
-	}
+    public function testWhenAnEventThrowsAnExceptionItPersistUntilNextCatchBlock(): void
+    {
+        $this->dispatcher->set('myMethod', function (): void {
+            throw new Exception('myMethod Exception');
+        });
 
-	public function testCallFunction5Params() {
-		$closure = function($param1, $params2, $params3, $param4, $param5) {
-			return 'hello'.$param1.$params2.$params3.$param4.$param5;
-		};
-		$params = ['param1', 'param2', 'param3', 'param4', 'param5'];
-		$result = $this->dispatcher->callFunction($closure, $params);
-		$this->assertEquals('helloparam1param2param3param4param5', $result);
-	}
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('myMethod Exception');
 
-	public function testCallFunction6Params() {
-		$closure = function($param1, $params2, $params3, $param4, $param5, $param6) {
-			return 'hello'.$param1.$params2.$params3.$param4.$param5.$param6;
-		};
-		$params = ['param1', 'param2', 'param3', 'param4', 'param5', 'param6'];
-		$result = $this->dispatcher->callFunction($closure, $params);
-		$this->assertEquals('helloparam1param2param3param4param5param6', $result);
-	}
+        $this->dispatcher->run('myMethod');
+    }
+
+    public function testWhenAnEventThrowsCustomExceptionItPersistUntilNextCatchBlock(): void
+    {
+        $this->dispatcher->set('checkEmail', function (string $email): void {
+            throw new InvalidEmailException("Invalid email $email");
+        });
+
+        $this->expectException(InvalidEmailException::class);
+        $this->expectExceptionMessage('Invalid email mail@mail,com');
+
+        $this->dispatcher->run('checkEmail', ['mail@mail,com']);
+    }
+
+    public function testItThrowsNoticeForOverrideRegisteredEvents(): void
+    {
+        set_error_handler(function (int $errno, string $errstr): void {
+            $this->assertSame(E_USER_NOTICE, $errno);
+            $this->assertSame("Event 'myMethod' has been overriden!", $errstr);
+        });
+
+        $this->dispatcher->set('myMethod', function (): string {
+            return 'Original';
+        });
+
+        $this->dispatcher->set('myMethod', function (): string {
+            return 'Overriden';
+        });
+
+        $this->assertSame('Overriden', $this->dispatcher->run('myMethod'));
+        restore_error_handler();
+    }
+
+    public function testItThrowsNoticeForInvalidFilterTypes(): void
+    {
+        set_error_handler(function (int $errno, string $errstr): void {
+            $this->assertSame(E_USER_NOTICE, $errno);
+            $this->assertStringStartsWith("Invalid filter type 'invalid', use ", $errstr);
+        });
+
+        $this->dispatcher
+            ->set('myMethod', function (): string {
+                return 'Original';
+            })
+            ->hook('myMethod', 'invalid', function (array &$params, &$output): void {
+                $output = 'Overriden';
+            });
+
+        $this->assertSame('Original', $this->dispatcher->run('myMethod'));
+        restore_error_handler();
+    }
+
+    public function testItThrowsAnExceptionForInvalidFilters(): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage('Invalid callable $filters[1]');
+
+        $params = [];
+        $output = '';
+        $invalidCallable = 'invalidGlobalFunction';
+
+        $validCallable = function (): void {
+        };
+
+        Dispatcher::filter([$validCallable, $invalidCallable], $params, $output);
+    }
+
+    public function testCallFunction6Params(): void
+    {
+        $func = function ($param1, $param2, $param3, $param4, $param5, $param6) {
+            return "hello{$param1}{$param2}{$param3}{$param4}{$param5}{$param6}";
+        };
+
+        $params = ['param1', 'param2', 'param3', 'param4', 'param5', 'param6'];
+        $result = Dispatcher::callFunction($func, $params);
+
+        $this->assertSame('helloparam1param2param3param4param5param6', $result);
+    }
 }

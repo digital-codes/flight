@@ -1,18 +1,16 @@
 <?php
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2012, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
+
+declare(strict_types=1);
+
+namespace tests;
 
 use flight\core\Loader;
+use tests\classes\Factory;
+use tests\classes\User;
+use PHPUnit\Framework\TestCase;
+use tests\classes\TesterClass;
 
-require_once __DIR__ . '/classes/User.php';
-require_once __DIR__ . '/classes/Factory.php';
-require_once __DIR__ . '/classes/TesterClass.php';
-
-class LoaderTest extends PHPUnit\Framework\TestCase
+class LoaderTest extends TestCase
 {
     private Loader $loader;
 
@@ -25,7 +23,7 @@ class LoaderTest extends PHPUnit\Framework\TestCase
     // Autoload a class
     public function testAutoload()
     {
-        $this->loader->register('tests', 'User');
+        $this->loader->register('tests', User::class);
 
         $test = $this->loader->load('tests');
 
@@ -36,7 +34,7 @@ class LoaderTest extends PHPUnit\Framework\TestCase
     // Register a class
     public function testRegister()
     {
-        $this->loader->register('a', 'User');
+        $this->loader->register('a', User::class);
 
         $user = $this->loader->load('a');
 
@@ -48,7 +46,7 @@ class LoaderTest extends PHPUnit\Framework\TestCase
     // Register a class with constructor parameters
     public function testRegisterWithConstructor()
     {
-        $this->loader->register('b', 'User', ['Bob']);
+        $this->loader->register('b', User::class, ['Bob']);
 
         $user = $this->loader->load('b');
 
@@ -60,7 +58,7 @@ class LoaderTest extends PHPUnit\Framework\TestCase
     // Register a class with initialization
     public function testRegisterWithInitialization()
     {
-        $this->loader->register('c', 'User', ['Bob'], function ($user) {
+        $this->loader->register('c', User::class, ['Bob'], function ($user) {
             $user->name = 'Fred';
         });
 
@@ -74,7 +72,7 @@ class LoaderTest extends PHPUnit\Framework\TestCase
     // Get a non-shared instance of a class
     public function testSharedInstance()
     {
-        $this->loader->register('d', 'User');
+        $this->loader->register('d', User::class);
 
         $user1 = $this->loader->load('d');
         $user2 = $this->loader->load('d');
@@ -87,7 +85,7 @@ class LoaderTest extends PHPUnit\Framework\TestCase
     // Gets an object from a factory method
     public function testRegisterUsingCallable()
     {
-        $this->loader->register('e', ['Factory', 'create']);
+        $this->loader->register('e', ['\tests\classes\Factory', 'create']);
 
         $obj = $this->loader->load('e');
 
@@ -119,41 +117,39 @@ class LoaderTest extends PHPUnit\Framework\TestCase
         self::assertInstanceOf(Factory::class, $obj);
     }
 
-	public function testUnregisterClass() {
-		$this->loader->register('g', 'User');
-		$current_class = $this->loader->get('g');
-		$this->assertEquals([ 'User', [], null ], $current_class);
-		$this->loader->unregister('g');
-		$unregistered_class_result = $this->loader->get('g');
-		$this->assertNull($unregistered_class_result);
-	}
+    public function testUnregisterClass()
+    {
+        $this->loader->register('g', User::class);
+        $current_class = $this->loader->get('g');
+        $this->assertEquals([ User::class, [], null ], $current_class);
+        $this->loader->unregister('g');
+        $unregistered_class_result = $this->loader->get('g');
+        $this->assertNull($unregistered_class_result);
+    }
 
-	public function testNewInstance6Params() {
-		$TesterClass = $this->loader->newInstance('TesterClass', ['Bob','Fred', 'Joe', 'Jane', 'Sally', 'Suzie']);
-		$this->assertEquals('Bob', $TesterClass->param1);
-		$this->assertEquals('Fred', $TesterClass->param2);
-		$this->assertEquals('Joe', $TesterClass->param3);
-		$this->assertEquals('Jane', $TesterClass->param4);
-		$this->assertEquals('Sally', $TesterClass->param5);
-		$this->assertEquals('Suzie', $TesterClass->param6);
-	}
+    public function testNewInstance6Params()
+    {
+        $TesterClass = $this->loader->newInstance(TesterClass::class, ['Bob','Fred', 'Joe', 'Jane', 'Sally', 'Suzie']);
+        $this->assertEquals('Bob', $TesterClass->param1);
+        $this->assertEquals('Fred', $TesterClass->param2);
+        $this->assertEquals('Joe', $TesterClass->param3);
+        $this->assertEquals('Jane', $TesterClass->param4);
+        $this->assertEquals('Sally', $TesterClass->param5);
+        $this->assertEquals('Suzie', $TesterClass->param6);
+    }
 
-	public function testNewInstance6ParamsBadClass() {
-		$this->expectException(Exception::class);
-		$this->expectExceptionMessage('Cannot instantiate BadClass');
-		$TesterClass = $this->loader->newInstance('BadClass', ['Bob','Fred', 'Joe', 'Jane', 'Sally', 'Suzie']);
-	}
-
-	public function testAddDirectoryAsArray() {
-		$loader = new class extends Loader {
-			public function getDirectories() {
-				return self::$dirs;
-			}
-		};
-		$loader->addDirectory([__DIR__ . '/classes']);
-		self::assertEquals([
-			dirname(__DIR__),
-			__DIR__ . '/classes'
-		], $loader->getDirectories());
-	}
+    public function testAddDirectoryAsArray()
+    {
+        $loader = new class extends Loader {
+            public function getDirectories()
+            {
+                return self::$dirs;
+            }
+        };
+        $loader->addDirectory([__DIR__ . '/classes']);
+        self::assertEquals([
+            dirname(__DIR__),
+            __DIR__ . '/classes'
+        ], $loader->getDirectories());
+    }
 }

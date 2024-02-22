@@ -1,12 +1,6 @@
 <?php
 
 declare(strict_types=1);
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2011, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
 
 namespace flight\net;
 
@@ -16,6 +10,9 @@ use flight\util\Collection;
  * The Request class represents an HTTP request. Data from
  * all the super globals $_GET, $_POST, $_COOKIE, and $_FILES
  * are stored and accessible via the Request object.
+ *
+ * @license MIT, http://flightphp.com/license
+ * @copyright Copyright (c) 2011, Mike Cao <mike@mikecao.com>
  *
  * The default request properties are:
  *
@@ -37,107 +34,105 @@ use flight\util\Collection;
  *   - **accept** - HTTP accept parameters
  *   - **proxy_ip** - Proxy IP address of the client
  */
-final class Request
+class Request
 {
     /**
-     * @var string URL being requested
+     * URL being requested
      */
     public string $url;
 
     /**
-     * @var string Parent subdirectory of the URL
+     * Parent subdirectory of the URL
      */
     public string $base;
 
     /**
-     * @var string Request method (GET, POST, PUT, DELETE)
+     * Request method (GET, POST, PUT, DELETE)
      */
     public string $method;
 
     /**
-     * @var string Referrer URL
+     * Referrer URL
      */
     public string $referrer;
 
     /**
-     * @var string IP address of the client
+     * IP address of the client
      */
     public string $ip;
 
     /**
-     * @var bool Whether the request is an AJAX request
+     * Whether the request is an AJAX request
      */
     public bool $ajax;
 
     /**
-     * @var string Server protocol (http, https)
+     * Server protocol (http, https)
      */
     public string $scheme;
 
     /**
-     * @var string Browser information
+     * Browser information
      */
     public string $user_agent;
 
     /**
-     * @var string Content type
+     * Content type
      */
     public string $type;
 
     /**
-     * @var int Content length
+     * Content length
      */
     public int $length;
 
     /**
-     * @var Collection Query string parameters
+     * Query string parameters
      */
     public Collection $query;
 
     /**
-     * @var Collection Post parameters
+     * Post parameters
      */
     public Collection $data;
 
     /**
-     * @var Collection Cookie parameters
+     * Cookie parameters
      */
     public Collection $cookies;
 
     /**
-     * @var Collection Uploaded files
+     * Uploaded files
      */
     public Collection $files;
 
     /**
-     * @var bool Whether the connection is secure
+     * Whether the connection is secure
      */
     public bool $secure;
 
     /**
-     * @var string HTTP accept parameters
+     * HTTP accept parameters
      */
     public string $accept;
 
     /**
-     * @var string Proxy IP address of the client
+     * Proxy IP address of the client
      */
     public string $proxy_ip;
 
     /**
-     * @var string HTTP host name
+     * HTTP host name
      */
     public string $host;
 
     /**
      * Stream path for where to pull the request body from
-     *
-     * @var string
      */
     private string $stream_path = 'php://input';
 
     /**
-     * @var string Raw HTTP request body
+     * Raw HTTP request body
      */
     public string $body = '';
 
@@ -146,7 +141,7 @@ final class Request
      *
      * @param array<string, mixed> $config Request configuration
      */
-    public function __construct($config = array())
+    public function __construct(array $config = [])
     {
         // Default properties
         if (empty($config)) {
@@ -160,7 +155,7 @@ final class Request
                 'scheme' => self::getScheme(),
                 'user_agent' => self::getVar('HTTP_USER_AGENT'),
                 'type' => self::getVar('CONTENT_TYPE'),
-                'length' => (int) self::getVar('CONTENT_LENGTH', 0),
+                'length' => intval(self::getVar('CONTENT_LENGTH', 0)),
                 'query' => new Collection($_GET),
                 'data' => new Collection($_POST),
                 'cookies' => new Collection($_COOKIE),
@@ -179,9 +174,10 @@ final class Request
      * Initialize request properties.
      *
      * @param array<string, mixed> $properties Array of request properties
-     * @return static
+     *
+     * @return self
      */
-    public function init(array $properties = [])
+    public function init(array $properties = []): self
     {
         // Set all the defined properties
         foreach ($properties as $name => $value) {
@@ -189,9 +185,9 @@ final class Request
         }
 
         // Get the requested URL without the base directory
-		// This rewrites the url in case the public url and base directories match 
-		// (such as installing on a subdirectory in a web server)
-		// @see testInitUrlSameAsBaseDirectory
+        // This rewrites the url in case the public url and base directories match
+        // (such as installing on a subdirectory in a web server)
+        // @see testInitUrlSameAsBaseDirectory
         if ('/' !== $this->base && '' !== $this->base && 0 === strpos($this->url, $this->base)) {
             $this->url = substr($this->url, \strlen($this->base));
         }
@@ -267,7 +263,7 @@ final class Request
      */
     public static function getProxyIpAddress(): string
     {
-        static $forwarded = [
+        $forwarded = [
             'HTTP_CLIENT_IP',
             'HTTP_X_FORWARDED_FOR',
             'HTTP_X_FORWARDED',
@@ -304,6 +300,81 @@ final class Request
     }
 
     /**
+     * This will pull a header from the request.
+     *
+     * @param string $header  Header name. Can be caps, lowercase, or mixed.
+     * @param string $default Default value if the header does not exist
+     *
+     * @return string
+     */
+    public static function getHeader(string $header, $default = ''): string
+    {
+        $header = 'HTTP_' . strtoupper(str_replace('-', '_', $header));
+        return self::getVar($header, $default);
+    }
+
+    /**
+     * Gets all the request headers
+     *
+     * @return array<string, string|int>
+     */
+    public static function getHeaders(): array
+    {
+        $headers = [];
+        foreach ($_SERVER as $key => $value) {
+            if (0 === strpos($key, 'HTTP_')) {
+                // converts headers like HTTP_CUSTOM_HEADER to Custom-Header
+                $key = str_replace(' ', '-', ucwords(str_replace('_', ' ', strtolower(substr($key, 5)))));
+                $headers[$key] = $value;
+            }
+        }
+        return $headers;
+    }
+
+    /**
+     * Alias of Request->getHeader(). Gets a single header.
+     *
+     * @param string $header  Header name. Can be caps, lowercase, or mixed.
+     * @param string $default Default value if the header does not exist
+     *
+     * @return string
+     */
+    public static function header(string $header, $default = '')
+    {
+        return self::getHeader($header, $default);
+    }
+
+    /**
+     * Alias of Request->getHeaders(). Gets all the request headers
+     *
+     * @return array<string, string|int>
+     */
+    public static function headers(): array
+    {
+        return self::getHeaders();
+    }
+
+    /**
+     * Gets the full request URL.
+     *
+     * @return string URL
+     */
+    public function getFullUrl(): string
+    {
+        return $this->scheme . '://' . $this->host . $this->url;
+    }
+
+    /**
+     * Grabs the scheme and host. Does not end with a /
+     *
+     * @return string
+     */
+    public function getBaseUrl(): string
+    {
+        return $this->scheme . '://' . $this->host;
+    }
+
+    /**
      * Parse query parameters from a URL.
      *
      * @param string $url URL string
@@ -312,7 +383,7 @@ final class Request
      */
     public static function parseQuery(string $url): array
     {
-        $params = array();
+        $params = [];
 
         $args = parse_url($url);
         if (isset($args['query'])) {
@@ -322,6 +393,11 @@ final class Request
         return $params;
     }
 
+    /**
+     * Gets the URL Scheme
+     *
+     * @return string 'http'|'https'
+     */
     public static function getScheme(): string
     {
         if (

@@ -1,19 +1,16 @@
 <?php
-/**
- * Flight: An extensible micro-framework.
- *
- * @copyright   Copyright (c) 2012, Mike Cao <mike@mikecao.com>
- * @license     MIT, http://flightphp.com/license
- */
+
+declare(strict_types=1);
+
+namespace tests;
 
 use flight\Engine;
+use tests\classes\User;
+use PHPUnit\Framework\TestCase;
 
-class AutoloadTest extends PHPUnit\Framework\TestCase
+class AutoloadTest extends TestCase
 {
-    /**
-     * @var Engine
-     */
-    private $app;
+    private Engine $app;
 
     protected function setUp(): void
     {
@@ -24,7 +21,7 @@ class AutoloadTest extends PHPUnit\Framework\TestCase
     // Autoload a class
     public function testAutoload()
     {
-        $this->app->register('user', 'User');
+        $this->app->register('user', User::class);
 
         $loaders = spl_autoload_functions();
 
