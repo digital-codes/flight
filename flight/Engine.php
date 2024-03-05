@@ -401,8 +401,8 @@ class Engine
                 continue;
             }
 
-            $use_v3_output_buffering = 
-                $this->response()->v2_output_buffering === false && 
+            $use_v3_output_buffering =
+                $this->response()->v2_output_buffering === false &&
                 $route->is_streamed === false;
 
             if ($use_v3_output_buffering === true) {
@@ -493,8 +493,8 @@ class Engine
                 }
             }
 
-            $use_v3_output_buffering = 
-                $this->response()->v2_output_buffering === false && 
+            $use_v3_output_buffering =
+                $this->response()->v2_output_buffering === false &&
                 $route->is_streamed === false;
 
             if ($use_v3_output_buffering === true) {
@@ -575,6 +575,7 @@ class Engine
      * @param ?int $code HTTP status code
      *
      * @throws Exception
+     * @deprecated 3.5.3 This method will be removed in v4
      */
     public function _stop(?int $code = null): void
     {
