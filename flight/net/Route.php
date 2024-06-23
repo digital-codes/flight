@@ -63,7 +63,7 @@ class Route
     /**
      * The middleware to be applied to the route
      *
-     * @var array<int, callable|object>
+     * @var array<int, callable|object|string>
      */
     public array $middleware = [];
 
@@ -81,11 +81,11 @@ class Route
      * Constructor.
      *
      * @param string $pattern  URL pattern
-     * @param callable  $callback Callback function
+     * @param callable|string  $callback Callback function
      * @param array<int, string>  $methods  HTTP methods
      * @param bool   $pass     Pass self in callback parameters
      */
-    public function __construct(string $pattern, callable $callback, array $methods, bool $pass, string $alias = '')
+    public function __construct(string $pattern, $callback, array $methods, bool $pass, string $alias = '')
     {
         $this->pattern = $pattern;
         $this->callback = $callback;
@@ -97,7 +97,7 @@ class Route
     /**
      * Checks if a URL matches the route pattern. Also parses named parameters in the URL.
      *
-     * @param string $url            Requested URL
+     * @param string $url            Requested URL (original format, not URL decoded)
      * @param bool   $case_sensitive Case sensitive matching
      *
      * @return bool Match status
@@ -105,7 +105,7 @@ class Route
     public function matchUrl(string $url, bool $case_sensitive = false): bool
     {
         // Wildcard or exact match
-        if ('*' === $this->pattern || $this->pattern === $url) {
+        if ($this->pattern === '*' || $this->pattern === $url) {
             return true;
         }
 
@@ -120,18 +120,26 @@ class Route
 
             for ($i = 0; $i < $len; $i++) {
                 if ($url[$i] === '/') {
-                    $n++;
+                    ++$n;
                 }
+
                 if ($n === $count) {
                     break;
                 }
             }
 
-            $this->splat = strval(substr($url, $i + 1));
+            $this->splat = urldecode(strval(substr($url, $i + 1)));
         }
 
         // Build the regex for matching
-        $regex = str_replace([')', '/*'], [')?', '(/?|/.*?)'], $this->pattern);
+        $pattern_utf_chars_encoded = preg_replace_callback(
+            '#(\\p{L}+)#u',
+            static function ($matches) {
+                return urlencode($matches[0]);
+            },
+            $this->pattern
+        );
+        $regex = str_replace([')', '/*'], [')?', '(/?|/.*?)'], $pattern_utf_chars_encoded);
 
         $regex = preg_replace_callback(
             '#@([\w]+)(:([^/\(\)]*))?#',
@@ -146,24 +154,20 @@ class Route
             $regex
         );
 
-        if ('/' === $last_char) { // Fix trailing slash
-            $regex .= '?';
-        } else { // Allow trailing slash
-            $regex .= '/?';
-        }
+        $regex .= $last_char === '/' ? '?' : '/?';
 
         // Attempt to match route and named parameters
-        if (preg_match('#^' . $regex . '(?:\?[\s\S]*)?$#' . (($case_sensitive) ? '' : 'i'), $url, $matches)) {
-            foreach ($ids as $k => $v) {
-                $this->params[$k] = (\array_key_exists($k, $matches)) ? urldecode($matches[$k]) : null;
-            }
-
-            $this->regex = $regex;
-
-            return true;
+        if (!preg_match('#^' . $regex . '(?:\?[\s\S]*)?$#' . (($case_sensitive) ? '' : 'i'), $url, $matches)) {
+            return false;
         }
 
-        return false;
+        foreach (array_keys($ids) as $k) {
+            $this->params[$k] = (\array_key_exists($k, $matches)) ? urldecode($matches[$k]) : null;
+        }
+
+        $this->regex = $regex;
+
+        return true;
     }
 
     /**
@@ -222,7 +226,7 @@ class Route
     /**
      * Sets the route middleware
      *
-     * @param array<int, callable>|callable $middleware
+     * @param array<int, callable|string>|callable|string $middleware
      */
     public function addMiddleware($middleware): self
     {
@@ -231,6 +235,17 @@ class Route
         } else {
             $this->middleware[] = $middleware;
         }
+        return $this;
+    }
+
+    /**
+     * If the response should be streamed
+     *
+     * @return self
+     */
+    public function stream(): self
+    {
+        $this->is_streamed = true;
         return $this;
     }
 

@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace tests;
 
+use ArgumentCountError;
 use Closure;
 use Exception;
 use flight\core\Dispatcher;
+use flight\Engine;
 use InvalidArgumentException;
 use PharIo\Manifest\InvalidEmailException;
 use tests\classes\Hello;
 use PHPUnit\Framework\TestCase;
+use tests\classes\ContainerDefault;
 use tests\classes\TesterClass;
 use TypeError;
 
@@ -34,9 +37,7 @@ class DispatcherTest extends TestCase
 
     public function testFunctionMapping(): void
     {
-        $this->dispatcher->set('map2', function (): string {
-            return 'hello';
-        });
+        $this->dispatcher->set('map2', fn (): string => 'hello');
 
         $this->assertSame('hello', $this->dispatcher->run('map2'));
     }
@@ -58,6 +59,9 @@ class DispatcherTest extends TestCase
             ->set('map-event', $customFunction)
             ->set('map-event-2', $anotherFunction);
 
+        $this->assertTrue($this->dispatcher->has('map-event'));
+        $this->assertTrue($this->dispatcher->has('map-event-2'));
+
         $this->dispatcher->clear();
 
         $this->assertFalse($this->dispatcher->has('map-event'));
@@ -72,6 +76,9 @@ class DispatcherTest extends TestCase
         $this->dispatcher
             ->set('map-event', $customFunction)
             ->set('map-event-2', $anotherFunction);
+
+        $this->assertTrue($this->dispatcher->has('map-event'));
+        $this->assertTrue($this->dispatcher->has('map-event-2'));
 
         $this->dispatcher->clear('map-event');
 
@@ -102,16 +109,33 @@ class DispatcherTest extends TestCase
 
     public function testBeforeAndAfter(): void
     {
-        $this->dispatcher->set('hello', function (string $name): string {
-            return "Hello, $name!";
-        });
+        $this->dispatcher->set('hello', fn (string $name): string => "Hello, $name!");
 
         $this->dispatcher
-            ->hook('hello', $this->dispatcher::FILTER_BEFORE, function (array &$params): void {
+            ->hook('hello', Dispatcher::FILTER_BEFORE, function (array &$params): void {
                 // Manipulate the parameter
                 $params[0] = 'Fred';
             })
-            ->hook('hello', $this->dispatcher::FILTER_AFTER, function (array &$params, string &$output): void {
+            ->hook('hello', Dispatcher::FILTER_AFTER, function (array &$params, string &$output): void {
+                // Manipulate the output
+                $output .= ' Have a nice day!';
+            });
+
+        $result = $this->dispatcher->run('hello', ['Bob']);
+
+        $this->assertSame('Hello, Fred! Have a nice day!', $result);
+    }
+
+    public function testBeforeAndAfterWithShortAfterFilterSyntax(): void
+    {
+        $this->dispatcher->set('hello', fn (string $name): string => "Hello, $name!");
+
+        $this->dispatcher
+            ->hook('hello', Dispatcher::FILTER_BEFORE, function (array &$params): void {
+                // Manipulate the parameter
+                $params[0] = 'Fred';
+            })
+            ->hook('hello', Dispatcher::FILTER_AFTER, function (string &$output): void {
                 // Manipulate the output
                 $output .= ' Have a nice day!';
             });
@@ -123,9 +147,10 @@ class DispatcherTest extends TestCase
 
     public function testInvalidCallback(): void
     {
-        $this->expectException(TypeError::class);
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage("Class 'NonExistentClass' not found. Is it being correctly autoloaded with Flight::path()?");
 
-        Dispatcher::execute(['NonExistentClass', 'nonExistentMethod']);
+        $this->dispatcher->execute(['NonExistentClass', 'nonExistentMethod']);
     }
 
     public function testInvalidCallableString(): void
@@ -133,27 +158,13 @@ class DispatcherTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Invalid callback specified.');
 
-        Dispatcher::execute('inexistentGlobalFunction');
-    }
-
-    public function testInvalidCallbackBecauseConstructorParameters(): void
-    {
-        $class = TesterClass::class;
-        $method = 'instanceMethod';
-        $exceptionMessage = "Method '$class::$method' cannot be called statically. ";
-        $exceptionMessage .= "$class::__construct require 6 parameters";
-
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage($exceptionMessage);
-
-        static $params = [];
-        Dispatcher::invokeMethod([$class, $method], $params);
+        $this->dispatcher->execute('nonexistentGlobalFunction');
     }
 
     // It will be useful for executing instance Controller methods statically
     public function testCanExecuteAnNonStaticMethodStatically(): void
     {
-        $this->assertSame('hello', Dispatcher::execute([Hello::class, 'sayHi']));
+        $this->assertSame('hello', $this->dispatcher->execute([Hello::class, 'sayHi']));
     }
 
     public function testItThrowsAnExceptionWhenRunAnUnregistedEventName(): void
@@ -191,7 +202,7 @@ class DispatcherTest extends TestCase
     {
         set_error_handler(function (int $errno, string $errstr): void {
             $this->assertSame(E_USER_NOTICE, $errno);
-            $this->assertSame("Event 'myMethod' has been overriden!", $errstr);
+            $this->assertSame("Event 'myMethod' has been overridden!", $errstr);
         });
 
         $this->dispatcher->set('myMethod', function (): string {
@@ -199,10 +210,10 @@ class DispatcherTest extends TestCase
         });
 
         $this->dispatcher->set('myMethod', function (): string {
-            return 'Overriden';
+            return 'Overridden';
         });
 
-        $this->assertSame('Overriden', $this->dispatcher->run('myMethod'));
+        $this->assertSame('Overridden', $this->dispatcher->run('myMethod'));
         restore_error_handler();
     }
 
@@ -218,7 +229,7 @@ class DispatcherTest extends TestCase
                 return 'Original';
             })
             ->hook('myMethod', 'invalid', function (array &$params, &$output): void {
-                $output = 'Overriden';
+                $output = 'Overridden';
             });
 
         $this->assertSame('Original', $this->dispatcher->run('myMethod'));
@@ -237,7 +248,7 @@ class DispatcherTest extends TestCase
         $validCallable = function (): void {
         };
 
-        Dispatcher::filter([$validCallable, $invalidCallable], $params, $output);
+        $this->dispatcher->filter([$validCallable, $invalidCallable], $params, $output);
     }
 
     public function testCallFunction6Params(): void
@@ -247,8 +258,75 @@ class DispatcherTest extends TestCase
         };
 
         $params = ['param1', 'param2', 'param3', 'param4', 'param5', 'param6'];
-        $result = Dispatcher::callFunction($func, $params);
+        $result = $this->dispatcher->callFunction($func, $params);
 
         $this->assertSame('helloparam1param2param3param4param5param6', $result);
+    }
+
+    public function testInvokeMethod(): void
+    {
+        $class = new TesterClass('param1', 'param2', 'param3', 'param4', 'param5', 'param6');
+        $result = $this->dispatcher->invokeMethod([$class, 'instanceMethod']);
+
+        $this->assertSame('param1', $class->param2);
+    }
+
+    public function testExecuteStringClassBadConstructParams(): void
+    {
+        $this->expectException(ArgumentCountError::class);
+        $this->expectExceptionMessageMatches('#Too few arguments to function tests\\\\classes\\\\TesterClass::__construct\(\), 1 passed .+ and exactly 6 expected#');
+        $this->dispatcher->execute(TesterClass::class . '->instanceMethod');
+    }
+
+    public function testExecuteStringClassNoConstruct(): void
+    {
+        $result = $this->dispatcher->execute(Hello::class . '->sayHi');
+        $this->assertSame('hello', $result);
+    }
+
+    public function testExecuteStringClassNoConstructDoubleColon(): void
+    {
+        $result = $this->dispatcher->execute(Hello::class . '::sayHi');
+        $this->assertSame('hello', $result);
+    }
+
+    public function testExecuteStringClassNoConstructArraySyntax(): void
+    {
+        $result = $this->dispatcher->execute([Hello::class, 'sayHi']);
+        $this->assertSame('hello', $result);
+    }
+
+    public function testExecuteStringClassDefaultContainer(): void
+    {
+        $engine = new Engine();
+        $engine->set('test_me_out', 'You got it boss!');
+        $this->dispatcher->setEngine($engine);
+        $result = $this->dispatcher->execute(ContainerDefault::class . '->testTheContainer');
+        $this->assertSame('You got it boss!', $result);
+    }
+
+    public function testExecuteStringClassDefaultContainerDoubleColon(): void
+    {
+        $engine = new Engine();
+        $engine->set('test_me_out', 'You got it boss!');
+        $this->dispatcher->setEngine($engine);
+        $result = $this->dispatcher->execute(ContainerDefault::class . '::testTheContainer');
+        $this->assertSame('You got it boss!', $result);
+    }
+
+    public function testExecuteStringClassDefaultContainerArraySyntax(): void
+    {
+        $engine = new Engine();
+        $engine->set('test_me_out', 'You got it boss!');
+        $this->dispatcher->setEngine($engine);
+        $result = $this->dispatcher->execute([ContainerDefault::class, 'testTheContainer']);
+        $this->assertSame('You got it boss!', $result);
+    }
+
+    public function testExecuteStringClassDefaultContainerButForgotInjectingEngine(): void
+    {
+        $this->expectException(TypeError::class);
+        $this->expectExceptionMessageMatches('#tests\\\\classes\\\\ContainerDefault::__construct\(\).+flight\\\\Engine, null given#');
+        $result = $this->dispatcher->execute([ContainerDefault::class, 'testTheContainer']);
     }
 }

@@ -11,10 +11,13 @@
     stopOnFailure="true"
     verbose="true"
     colors="true">
-    <coverage processUncoveredFiles="true">
+    <coverage processUncoveredFiles="false">
         <include>
             <directory suffix=".php">flight/</directory>
         </include>
+		<exclude>
+			<file>flight/autoload.php</file>
+		</exclude>
     </coverage>
     <testsuites>
         <testsuite name="default">
@@ -23,6 +26,7 @@
     </testsuites>
     <logging />
     <php>
+        <ini name="error_reporting" value="-1"/>
         <env name="PHPUNIT_TEST" value="true" force="true" />
     </php>
 </phpunit>
