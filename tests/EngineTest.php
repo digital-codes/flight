@@ -12,6 +12,7 @@ use flight\net\Request;
 use flight\net\Response;
 use flight\util\Collection;
 use InvalidArgumentException;
+use JsonException;
 use PDOException;
 use PHPUnit\Framework\TestCase;
 use tests\classes\Container;
@@ -45,7 +46,7 @@ class EngineTest extends TestCase
 		$engine->request()->url = '/someRoute';
         $engine->start();
 
-        $this->assertFalse($engine->router()->case_sensitive);
+        $this->assertFalse($engine->router()->caseSensitive);
         $this->assertTrue($engine->response()->content_length);
     }
 
@@ -64,7 +65,7 @@ class EngineTest extends TestCase
 		// This is a necessary evil because of how the v2 output buffer works.
 		ob_end_clean();
 
-        $this->assertFalse($engine->router()->case_sensitive);
+        $this->assertFalse($engine->router()->caseSensitive);
         $this->assertTrue($engine->response()->content_length);
     }
 
@@ -173,6 +174,30 @@ class EngineTest extends TestCase
         $this->expectOutputString('<h1>404 Not Found</h1><h3>The page you have requested could not be found.</h3>');
         $engine->start();
     }
+
+	public function testDoubleStart() 
+    {
+		$engine = new Engine();
+		$engine->route('/someRoute', function () {
+			echo 'i ran';
+		}, true);
+		$engine->request()->url = '/someRoute';
+		$engine->start();
+
+		$request = $engine->request();
+		$response = $engine->response();
+
+		// This is pretending like this is embodied in a platform like swoole where
+		// another request comes in while still holding all the same state.
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['REQUEST_URI'] = '/someRoute';
+		$engine->start();
+
+		$this->assertFalse($request === $engine->request());
+		$this->assertFalse($response === $engine->response());
+
+		$this->expectOutputString('i rani ran');
+	}
 
     public function testStopWithCode()
     {
@@ -355,10 +380,28 @@ class EngineTest extends TestCase
     {
         $engine = new Engine();
         $engine->json(['key1' => 'value1', 'key2' => 'value2']);
-        $this->assertEquals('application/json; charset=utf-8', $engine->response()->headers()['Content-Type']);
+        $this->assertEquals('application/json', $engine->response()->headers()['Content-Type']);
         $this->assertEquals(200, $engine->response()->status());
 		$this->assertEquals('{"key1":"value1","key2":"value2"}', $engine->response()->getBody());
     }
+
+	public function testJsonWithDuplicateDefaultFlags()
+	{
+		$engine = new Engine();
+		// utf8 emoji
+		$engine->json(['key1' => 'value1', 'key2' => 'value2', 'utf8_emoji' => '😀'], 201, true, '', JSON_HEX_TAG | JSON_HEX_TAG | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+		$this->assertEquals('application/json', $engine->response()->headers()['Content-Type']);
+		$this->assertEquals(201, $engine->response()->status());
+		$this->assertEquals('{"key1":"value1","key2":"value2","utf8_emoji":"😀"}', $engine->response()->getBody());
+	}
+
+	public function testJsonThrowOnErrorByDefault()
+	{
+		$engine = new Engine();
+		$this->expectException(JsonException::class);
+		$this->expectExceptionMessage('Malformed UTF-8 characters, possibly incorrectly encoded');
+		$engine->json(['key1' => 'value1', 'key2' => 'value2', 'utf8_emoji' => "\xB1\x31"]);
+	}
 
 	public function testJsonV2OutputBuffering()
     {
@@ -366,7 +409,7 @@ class EngineTest extends TestCase
 		$engine->response()->v2_output_buffering = true;
         $engine->json(['key1' => 'value1', 'key2' => 'value2']);
         $this->expectOutputString('{"key1":"value1","key2":"value2"}');
-        $this->assertEquals('application/json; charset=utf-8', $engine->response()->headers()['Content-Type']);
+        $this->assertEquals('application/json', $engine->response()->headers()['Content-Type']);
         $this->assertEquals(200, $engine->response()->status());
     }
 
@@ -375,7 +418,7 @@ class EngineTest extends TestCase
         $engine = new Engine();
 		$this->expectOutputString('{"key1":"value1","key2":"value2"}');
         $engine->jsonHalt(['key1' => 'value1', 'key2' => 'value2']);
-        $this->assertEquals('application/json; charset=utf-8', $engine->response()->headers()['Content-Type']);
+        $this->assertEquals('application/json', $engine->response()->headers()['Content-Type']);
         $this->assertEquals(200, $engine->response()->status());
 		$this->assertEquals('{"key1":"value1","key2":"value2"}', $engine->response()->getBody());
     }

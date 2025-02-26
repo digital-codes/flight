@@ -42,13 +42,13 @@ use flight\net\Route;
  * Routes a PATCH URL to a callback function.
  * @method Route delete(string $pattern, callable|string $callback, bool $pass_route = false, string $alias = '')
  * Routes a DELETE URL to a callback function.
- * @method void resource(string $pattern, string $controllerClass, array $methods = [])
+ * @method void resource(string $pattern, string $controllerClass, array<string, string|array<string>> $methods = [])
  * Adds standardized RESTful routes for a controller.
  * @method Router router() Gets router
  * @method string getUrl(string $alias) Gets a url from an alias
  *
  * # Views
- * @method void render(string $file, ?array $data = null, ?string $key = null) Renders template
+ * @method void render(string $file, ?array<string,mixed> $data = null, ?string $key = null) Renders template
  * @method View view() Gets current view
  *
  * # Request-Response
@@ -93,6 +93,9 @@ class Engine
 
     /** If the framework has been initialized or not. */
     protected bool $initialized = false;
+
+    /** If the request has been handled or not. */
+    protected bool $requestHandled = false;
 
     public function __construct()
     {
@@ -179,7 +182,7 @@ class Engine
             }
 
             // Set case-sensitivity
-            $self->router()->case_sensitive = $self->get('flight.case_sensitive');
+            $self->router()->caseSensitive = $self->get('flight.case_sensitive');
             // Set Content-Length
             $self->response()->content_length = $self->get('flight.content_length');
             // This is to maintain legacy handling of output buffering
@@ -476,6 +479,19 @@ class Engine
     {
         $dispatched = false;
         $self = $this;
+
+        // This behavior is specifically for test suites, and for async platforms like swoole, workerman, etc.
+        if ($this->requestHandled === false) {
+            // not doing much here, just setting the requestHandled flag to true
+            $this->requestHandled = true;
+        } else {
+            // deregister the request and response objects and re-register them with new instances
+            $this->unregister('request');
+            $this->unregister('response');
+            $this->register('request', Request::class);
+            $this->register('response', Response::class);
+            $this->router()->reset();
+        }
         $request = $this->request();
         $response = $this->response();
         $router = $this->router();
@@ -498,7 +514,6 @@ class Engine
 
         // Route the request
         $failedMiddlewareCheck = false;
-
         while ($route = $router->route($request)) {
             $params = array_values($route->params);
 
@@ -600,7 +615,8 @@ class Engine
      */
     public function _error(Throwable $e): void
     {
-        $msg = sprintf(<<<HTML
+        $msg = sprintf(
+            <<<'HTML'
             <h1>500 Internal Server Error</h1>
                 <h3>%s (%s)</h3>
                 <pre>%s</pre>
@@ -829,7 +845,7 @@ class Engine
      * @param mixed $data JSON data
      * @param int $code HTTP status code
      * @param bool $encode Whether to perform JSON encoding
-     * @param string $charset Charset
+     * @param ?string $charset Charset
      * @param int $option Bitmask Json constant such as JSON_HEX_QUOT
      *
      * @throws Exception
@@ -838,14 +854,16 @@ class Engine
         $data,
         int $code = 200,
         bool $encode = true,
-        string $charset = 'utf-8',
+        ?string $charset = 'utf-8',
         int $option = 0
     ): void {
+        // add some default flags
+        $option |= JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR;
         $json = $encode ? json_encode($data, $option) : $data;
 
         $this->response()
             ->status($code)
-            ->header('Content-Type', 'application/json; charset=' . $charset)
+            ->header('Content-Type', 'application/json')
             ->write($json);
         if ($this->response()->v2_output_buffering === true) {
             $this->response()->send();
