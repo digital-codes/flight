@@ -8,6 +8,8 @@ use flight\net\Response;
 use flight\net\Router;
 use flight\template\View;
 use flight\net\Route;
+use flight\core\EventDispatcher;
+use Psr\Container\ContainerInterface;
 
 require_once __DIR__ . '/autoload.php';
 
@@ -17,9 +19,11 @@ require_once __DIR__ . '/autoload.php';
  * @license MIT, http://flightphp.com/license
  * @copyright Copyright (c) 2011, Mike Cao <mike@mikecao.com>
  *
+ * @template T of object
+ *
  * # Core methods
  * @method static void start() Starts the framework.
- * @method static void path(string $path) Adds a path for autoloading classes.
+ * @method static void path(string $dir) Adds a path for autoloading classes.
  * @method static void stop(?int $code = null) Stops the framework and sends a response.
  * @method static void halt(int $code = 200, string $message = '', bool $actuallyExit = true)
  * Stop the framework with an optional status code and message.
@@ -27,33 +31,40 @@ require_once __DIR__ . '/autoload.php';
  * Registers a class to a framework method.
  * @method static void unregister(string $methodName)
  * Unregisters a class to a framework method.
- * @method static void registerContainerHandler(callable|object $containerHandler) Registers a container handler.
+ * @method static void registerContainerHandler(ContainerInterface|callable(class-string<T> $id, array<int|string, mixed> $params): ?T $containerHandler) Registers a container handler.
+ *
+ * # Class registration
+ * @method EventDispatcher eventDispatcher() Gets event dispatcher
+ *
+ * # Class registration
+ * @method EventDispatcher eventDispatcher() Gets event dispatcher
  *
  * # Routing
- * @method static Route route(string $pattern, callable|string $callback, bool $pass_route = false, string $alias = '')
+ * @method static Route route(string $pattern, callable|string|array{0: class-string, 1: string} $callback, bool $pass_route = false, string $alias = '')
  * Maps a URL pattern to a callback with all applicable methods.
- * @method static void group(string $pattern, callable $callback, callable[] $group_middlewares = [])
+ * @method static void group(string $pattern, callable $callback, (class-string|callable|array{0: class-string, 1: string})[] $group_middlewares = [])
  * Groups a set of routes together under a common prefix.
- * @method static Route post(string $pattern, callable|string $callback, bool $pass_route = false, string $alias = '')
+ * @method static Route post(string $pattern, callable|string|array{0: class-string, 1: string} $callback, bool $pass_route = false, string $alias = '')
  * Routes a POST URL to a callback function.
- * @method static Route put(string $pattern, callable|string $callback, bool $pass_route = false, string $alias = '')
+ * @method static Route put(string $pattern, callable|string|array{0: class-string, 1: string} $callback, bool $pass_route = false, string $alias = '')
  * Routes a PUT URL to a callback function.
- * @method static Route patch(string $pattern, callable|string $callback, bool $pass_route = false, string $alias = '')
+ * @method static Route patch(string $pattern, callable|string|array{0: class-string, 1: string} $callback, bool $pass_route = false, string $alias = '')
  * Routes a PATCH URL to a callback function.
- * @method static Route delete(string $pattern, callable|string $callback, bool $pass_route = false, string $alias = '')
+ * @method static Route delete(string $pattern, callable|string|array{0: class-string, 1: string} $callback, bool $pass_route = false, string $alias = '')
  * Routes a DELETE URL to a callback function.
- * @method static void resource(string $pattern, string $controllerClass, array<string, string|array<string>> $methods = [])
+ * @method static void resource(string $pattern, class-string $controllerClass, array<string, string|array<string>> $methods = [])
  * Adds standardized RESTful routes for a controller.
  * @method static Router router() Returns Router instance.
  * @method static string getUrl(string $alias, array<string, mixed> $params = []) Gets a url from an alias
- *
  * @method static void map(string $name, callable $callback) Creates a custom framework method.
  *
+ * # Filters
  * @method static void before(string $name, Closure(array<int, mixed> &$params, string &$output): (void|false) $callback)
  * Adds a filter before a framework method.
  * @method static void after(string $name, Closure(array<int, mixed> &$params, string &$output): (void|false) $callback)
  * Adds a filter after a framework method.
  *
+ * # Variables
  * @method static void set(string|iterable<string, mixed> $key, mixed $value) Sets a variable.
  * @method static mixed get(?string $key) Gets a variable.
  * @method static bool has(string $key) Checks if a variable is set.
@@ -63,6 +74,10 @@ require_once __DIR__ . '/autoload.php';
  * @method static void render(string $file, ?array<string, mixed> $data = null, ?string $key = null)
  * Renders a template file.
  * @method static View view() Returns View instance.
+ *
+ * # Events
+ * @method void onEvent(string $event, callable $callback) Registers a callback for an event.
+ * @method void triggerEvent(string $event, ...$args) Triggers an event.
  *
  * # Request-Response
  * @method static Request request() Returns Request instance.
@@ -95,6 +110,7 @@ class Flight
      */
     private function __construct()
     {
+        //
     }
 
     /**
@@ -105,6 +121,7 @@ class Flight
      */
     private function __clone()
     {
+        //
     }
 
     /**

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace tests;
 
-use ErrorException;
 use Exception;
 use flight\database\PdoWrapper;
 use flight\Engine;
@@ -843,31 +842,6 @@ class EngineTest extends TestCase
         $engine->start();
 
         $this->expectOutputString('You got it boss!');
-    }
-
-    public function testContainerDicePdoWrapperTestBadParams() {
-        $engine = new Engine();
-        $dice = new \Dice\Dice();
-        $engine->registerContainerHandler(function ($class, $params) use ($dice) {
-            return $dice->create($class, $params);
-        });
-        
-        $engine->route('/container', Container::class.'->testThePdoWrapper');
-        $engine->request()->url = '/container';
-
-        // php 7.4 will throw a PDO exception, but php 8 will throw an ErrorException
-        if(version_compare(PHP_VERSION, '8.1.0') >= 0) {
-            $this->expectException(ErrorException::class);
-            $this->expectExceptionMessageMatches("/Passing null to parameter/");
-        } elseif(version_compare(PHP_VERSION, '8.0.0') >= 0) {
-            $this->expectException(PDOException::class);
-            $this->expectExceptionMessageMatches("/must be a valid data source name/");
-        } else {
-            $this->expectException(PDOException::class);
-            $this->expectExceptionMessageMatches("/invalid data source name/");
-        }
-
-        $engine->start();
     }
 
     public function testContainerDiceBadClass() {

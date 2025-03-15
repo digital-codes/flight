@@ -134,6 +134,22 @@ class FlightTest extends TestCase
         Flight::start();
     }
 
+    public function testStaticNestedGroups(): void
+    {
+        Flight::group('/', static function (): void {
+            Flight::group('/', static function (): void {
+                Flight::route('GET /', static function (): void {
+                    echo "test";
+                });
+            });
+        });
+
+        Flight::request()->url = '/';
+
+        $this->expectOutputString('test');
+        Flight::start();
+    }
+
     public function testStaticRouteGet()
     {
 
@@ -209,7 +225,7 @@ class FlightTest extends TestCase
         Flight::route('/path1/@param:[a-zA-Z0-9]{2,3}', function () {
             echo 'I win';
         }, false, 'path1');
-        $url = Flight::getUrl('path1', [ 'param' => 123 ]);
+        $url = Flight::getUrl('path1', ['param' => 123]);
         $this->assertEquals('/path1/123', $url);
     }
 
@@ -316,7 +332,7 @@ class FlightTest extends TestCase
         Flight::register('response', $mock_response_class_name);
         Flight::route('/stream', function () {
             echo 'stream';
-        })->streamWithHeaders(['Content-Type' => 'text/plain', 'X-Test' => 'test', 'status' => 200 ]);
+        })->streamWithHeaders(['Content-Type' => 'text/plain', 'X-Test' => 'test', 'status' => 200]);
         Flight::request()->url = '/stream';
         $this->expectOutputString('stream');
         Flight::start();
@@ -381,15 +397,11 @@ class FlightTest extends TestCase
         $html = <<<'html'
         <div>Hi</div>
         <div>Hi</div>
-
         <input type="number" />
-
         <input type="number" />
-
         html;
 
-        // if windows replace \n with \r\n
-        $html = str_replace("\n", PHP_EOL, $html);
+        $html = str_replace(["\n", "\r"], '', $html);
 
         $this->expectOutputString($html);
 
