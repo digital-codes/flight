@@ -409,6 +409,21 @@ class EngineTest extends TestCase
         $this->expectOutputString('');
     }
 
+	public function testOptionsRoute(): void
+    {
+        $engine = new Engine();
+        $engine->route('GET /someRoute', function () {
+            echo 'i ran';
+        }, true);
+        $engine->request()->method = 'OPTIONS';
+        $engine->request()->url = '/someRoute';
+        $engine->start();
+
+        // No body should be sent
+        $this->expectOutputString('');
+		$this->assertEquals('GET, HEAD, OPTIONS', $engine->response()->headers()['Allow']);
+    }
+
     public function testHalt(): void
     {
         $engine = new class extends Engine {
@@ -1070,9 +1085,10 @@ class EngineTest extends TestCase
 
         $engine->start();
 
-		$this->expectOutputString('Method Not Allowed');
+		$this->expectOutputString('Method Not Allowed. Allowed Methods are: POST, OPTIONS');
         $this->assertEquals(405, $engine->response()->status());
-		$this->assertEquals('Method Not Allowed', $engine->response()->getBody());
+		$this->assertEquals('Method Not Allowed. Allowed Methods are: POST, OPTIONS', $engine->response()->getBody());
+		$this->assertEquals('POST, OPTIONS', $engine->response()->headers()['Allow']);
 	}
 
 	public function testDownload(): void
@@ -1086,11 +1102,13 @@ class EngineTest extends TestCase
         // doing this so we can overwrite some parts of the response
         $engine->getLoader()->register('response', function () {
             return new class extends Response {
+				public $headersSent = [];
                 public function setRealHeader(
                     string $header_string,
                     bool $replace = true,
                     int $response_code = 0
                 ): self {
+					$this->headersSent[] = $header_string;
                     return $this;
                 }
             };
@@ -1100,6 +1118,37 @@ class EngineTest extends TestCase
 		$streamPath = stream_get_meta_data($tmpfile)['uri'];
 		$this->expectOutputString('I am a teapot');
         $engine->download($streamPath);
+		$this->assertContains('Content-Disposition: attachment; filename="'.basename($streamPath).'"', $engine->response()->headersSent);
+    }
+
+	public function testDownloadWithDefaultFileName(): void
+    {
+        $engine = new class extends Engine {
+            public function getLoader()
+            {
+                return $this->loader;
+            }
+        };
+        // doing this so we can overwrite some parts of the response
+        $engine->getLoader()->register('response', function () {
+            return new class extends Response {
+				public $headersSent = [];
+                public function setRealHeader(
+                    string $header_string,
+                    bool $replace = true,
+                    int $response_code = 0
+                ): self {
+					$this->headersSent[] = $header_string;
+                    return $this;
+                }
+            };
+        });
+		$tmpfile = tmpfile();
+		fwrite($tmpfile, 'I am a teapot');
+		$streamPath = stream_get_meta_data($tmpfile)['uri'];
+		$this->expectOutputString('I am a teapot');
+        $engine->download($streamPath, 'something.txt');
+		$this->assertContains('Content-Disposition: attachment; filename="something.txt"', $engine->response()->headersSent);
     }
 
 	public function testDownloadBadPath() {
