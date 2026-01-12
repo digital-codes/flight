@@ -25,8 +25,8 @@ class UploadedFileTest extends TestCase
             unlink('real_file');
         }
 
-		// not found with file_exists...just delete it brute force
-		@unlink('tmp_symlink');
+        // not found with file_exists...just delete it brute force
+        @unlink('tmp_symlink');
     }
 
     public function testMoveToFalseSuccess(): void
@@ -55,7 +55,7 @@ class UploadedFileTest extends TestCase
     /**
      * @dataProvider getFileErrorMessageTests
      */
-    public function testMoveToFailureMessages($error, $message)
+    public function testMoveToFailureMessages(int $error, string $message): void
     {
         file_put_contents('tmp_name', 'test');
         $uploadedFile = new UploadedFile('file.txt', 'text/plain', 4, 'tmp_name', $error);
