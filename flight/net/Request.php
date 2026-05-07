@@ -138,6 +138,12 @@ class Request
     public string $servername;
 
     /**
+     * Whether to allow HTTP method override via X-HTTP-Method-Override header or _method POST field.
+     * Controlled by the flight.allow_method_override engine setting.
+     */
+    public static bool $allowMethodOverride = true;
+
+    /**
      * Stream path for where to pull the request body from
      */
     private string $stream_path = 'php://input';
@@ -282,10 +288,12 @@ class Request
     {
         $method = self::getVar('REQUEST_METHOD', 'GET');
 
-        if (self::getVar('HTTP_X_HTTP_METHOD_OVERRIDE') !== '') {
-            $method = self::getVar('HTTP_X_HTTP_METHOD_OVERRIDE');
-        } elseif (isset($_REQUEST['_method']) === true) {
-            $method = $_REQUEST['_method'];
+        if (self::$allowMethodOverride === true) {
+            if (self::getVar('HTTP_X_HTTP_METHOD_OVERRIDE') !== '') {
+                $method = self::getVar('HTTP_X_HTTP_METHOD_OVERRIDE');
+            } elseif (isset($_REQUEST['_method']) === true) {
+                $method = $_REQUEST['_method'];
+            }
         }
 
         return strtoupper($method);
@@ -439,15 +447,13 @@ class Request
      */
     public static function getScheme(): string
     {
-        if (
-            (strtolower(self::getVar('HTTPS')) === 'on')
-            ||
-            (self::getVar('HTTP_X_FORWARDED_PROTO') === 'https')
-            ||
-            (self::getVar('HTTP_FRONT_END_HTTPS') === 'on')
-            ||
-            (self::getVar('REQUEST_SCHEME') === 'https')
-        ) {
+        if (strtolower(self::getVar('HTTPS')) === 'on') {
+            return 'https';
+        } elseif (self::getVar('HTTP_X_FORWARDED_PROTO') === 'https') {
+            return 'https';
+        } elseif (self::getVar('HTTP_FRONT_END_HTTPS') === 'on') {
+            return 'https';
+        } elseif (self::getVar('REQUEST_SCHEME') === 'https') {
             return 'https';
         }
 
@@ -478,7 +484,8 @@ class Request
     /**
      * Retrieves the array of uploaded files.
      *
-     * @return array<string, UploadedFile|array<int, UploadedFile>> Key is field name; value is either a single UploadedFile or an array of UploadedFile when multiple were uploaded.
+     * @return array<string, UploadedFile|array<int, UploadedFile>>
+     * Key is field name; value is either a single UploadedFile or an array of UploadedFile when multiple were uploaded.
      */
     public function getUploadedFiles(): array
     {

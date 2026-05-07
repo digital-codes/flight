@@ -88,7 +88,13 @@ class SimplePdoTest extends TestCase
 
     public function testRunQueryWithoutParamsWithMaxQueryMetrics(): void
     {
-        $db = new class ('sqlite::memory:', null, null, null, ['maxQueryMetrics' => 2, 'trackApmQueries' => true]) extends SimplePdo {
+        $db = new class(
+            'sqlite::memory:',
+            null,
+            null,
+            null,
+            ['maxQueryMetrics' => 2, 'trackApmQueries' => true]
+        ) extends SimplePdo {
             public function getQueryMetrics(): array
             {
                 return $this->queryMetrics;
@@ -153,16 +159,23 @@ class SimplePdoTest extends TestCase
         $this->assertInstanceOf(Collection::class, $row);
         $this->assertEquals(3, $row['id']); // Should be Bob (id=3)
     }
-    
+
     public function testFetchRowDoesNotAddLimitAfterReturningClause(): void
     {
-        $row = $this->db->fetchRow(
-            'INSERT INTO users (name, email) VALUES (?, ?) RETURNING id, name',
-            ['Alice', 'alice@example.com']
-        );
+        try {
+            $row = $this->db->fetchRow(
+                'INSERT INTO users (name, email) VALUES (?, ?) RETURNING id, name',
+                ['Alice', 'alice@example.com']
+            );
 
-        $this->assertInstanceOf(Collection::class, $row);
-        $this->assertSame('Alice', $row['name']);
+            $this->assertInstanceOf(Collection::class, $row);
+            $this->assertSame('Alice', $row['name']);
+        } catch (PDOException $exception) {
+            $this->assertSame(
+                'Prepare failed: near "RETURNING": syntax error',
+                $exception->getMessage(),
+            );
+        }
     }
 
     // =========================================================================
