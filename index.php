@@ -2,10 +2,9 @@
 
 declare(strict_types=1);
 
-require_once 'flight/Flight.php';
-// require 'flight/autoload.php';
+require_once __DIR__ . '/flight/autoload.php';
 
-Flight::route('/', function () {
+Flight::route('/', static function (): void {
     echo 'hello world!';
 });
 
