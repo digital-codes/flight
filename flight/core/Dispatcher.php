@@ -18,8 +18,8 @@ use TypeError;
  * allows you to hook other functions to an event that can modify the
  * input parameters and/or the output.
  *
- * @license MIT, http://flightphp.com/license
- * @copyright Copyright (c) 2011, Mike Cao <mike@mikecao.com>
+ * @copyright 2011 Mike Cao https://mikecao.com
+ * @license https://docs.flightphp.com/license MIT
  * @phpstan-template EngineTemplate of object
  */
 class Dispatcher
@@ -415,8 +415,7 @@ class Dispatcher
         // Final check to make sure it's actually a class and a method, or throw an error
         if (is_object($class) === false && class_exists($class) === false) {
             $exception = new Exception(
-                "Class '$class' not found. "
-                    . "Is it being correctly autoloaded with Flight::path()?"
+                "Class '$class' not found. Is it being correctly autoloaded with Flight::path()?"
             );
 
             // If this tried to resolve a class in a container and failed somehow, throw the exception
